@@ -9,17 +9,32 @@ const routes = [
   ["contact", "Contact"],
 ] as const;
 
-test("home exposes the complete route foundation", async ({ page }) => {
+test("home exposes the spatial graph and complete route foundation", async ({ page }) => {
   await page.goto("/");
 
   await expect(
-    page.getByRole("heading", { level: 1, name: /engineering systems/i }),
+    page.getByRole("heading", { level: 1, name: /orbital filesystem/i }),
   ).toBeVisible();
-  await expect(page.locator('[data-phase="route-foundation"]')).toBeVisible();
+  await expect(page.locator('[data-phase="spatial-foundation"]')).toBeVisible();
+  await expect(page.locator('[data-spatial-scene="orbital-filesystem"]')).toHaveAttribute(
+    "data-active",
+    "true",
+  );
+  await expect(page.locator("canvas")).toBeVisible();
   await expect(
     page.getByRole("navigation", { name: "Portfolio sections" }),
   ).toBeVisible();
-  await expect(page.getByText("WEBGL MODULE: NOT LOADED")).toBeVisible();
+  await expect(page.getByText("WEBGL MODULE: ACTIVE")).toBeVisible();
+});
+
+test("development stress mode renders the clamped 50-node fixture", async ({
+  page,
+}) => {
+  await page.goto("/?debugNodes=50");
+
+  const metrics = page.getByLabel("Spatial scene metrics");
+  await expect(metrics).toContainText("50");
+  await expect(metrics).toContainText("NODES");
 });
 
 for (const [slug, title] of routes) {
@@ -30,6 +45,9 @@ for (const [slug, title] of routes) {
     await expect(
       page.getByRole("heading", { level: 1, name: title }),
     ).toBeVisible();
+    await expect(
+      page.locator('[data-spatial-scene="orbital-filesystem"]'),
+    ).toHaveAttribute("data-active", "false");
     const navigation = page.getByRole("navigation", {
       name: "Portfolio sections",
     });

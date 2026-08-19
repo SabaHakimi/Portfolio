@@ -10,7 +10,7 @@ describe("home page", () => {
     expect(
       screen.getByRole("heading", {
         level: 1,
-        name: /engineering systems/i,
+        name: /orbital filesystem/i,
       }),
     ).toBeInTheDocument();
 
@@ -21,11 +21,11 @@ describe("home page", () => {
     }
   });
 
-  it("marks the spatial renderer as deferred", () => {
+  it("describes the Phase 1 inspection controls without activating routes", () => {
     render(<Home />);
 
-    expect(
-      screen.getByText(/spatial renderer and graph interaction/i),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/drag/i)).toBeInTheDocument();
+    expect(screen.getByText(/node route activation enters service in phase 2/i))
+      .toBeInTheDocument();
   });
 });

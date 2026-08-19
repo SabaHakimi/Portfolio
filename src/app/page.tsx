@@ -1,91 +1,76 @@
 import Link from "next/link";
-import {
-  getSectionHref,
-  portfolioSections,
-} from "@/lib/portfolio-map";
+import { portfolioSections } from "@/lib/portfolio-map";
 
 export default function Home() {
   return (
-    <div className="home-screen">
-      <section className="home-hero" aria-labelledby="home-title">
-        <div className="home-hero__status">
-          <span>ROOT_NODE</span>
-          <span>6 DIRECTORIES</span>
-          <span>18 CONTENT NODES</span>
-        </div>
-
-        <p className="eyebrow">Software engineering portfolio / template</p>
+    <div className="home-spatial-hud">
+      <section
+        className="home-hud-panel home-hud-intro"
+        aria-labelledby="home-title"
+      >
+        <p className="eyebrow">Software engineering portfolio / root node</p>
         <h1 id="home-title">
-          Engineering systems.
-          <span>Building clear interfaces.</span>
+          Orbital{" "}
+          <span>filesystem.</span>
         </h1>
-        <p className="home-hero__summary">
-          Placeholder copy for a software engineer focused on thoughtful
-          systems, high-quality implementation, and interfaces that make
-          complex work easier to understand.
+        <p>
+          A spatial index of selected work, experience, education, and
+          engineering capabilities. Placeholder identity record active.
         </p>
-
-        <div className="home-hero__actions">
-          <Link className="primary-action" href="/projects">
-            Explore projects <span aria-hidden="true">↗</span>
-          </Link>
-          <Link className="secondary-action" href="/experience">
-            View experience
-          </Link>
-        </div>
-
-        <div className="phase-notice">
-          <span className="phase-notice__index">00</span>
-          <div>
-            <strong>Route foundation active</strong>
-            <p>
-              The spatial renderer and graph interaction are intentionally
-              reserved for Phase 1.
-            </p>
-          </div>
-        </div>
+        <Link className="primary-action" href="/projects">
+          Explore projects <span aria-hidden="true">↗</span>
+        </Link>
       </section>
 
-      <section className="directory-panel" aria-labelledby="directory-title">
-        <div className="section-heading-row">
+      <section
+        className="home-hud-panel home-hud-directory"
+        aria-labelledby="directory-title"
+      >
+        <div className="home-hud-directory__header">
           <div>
-            <p className="eyebrow">Filesystem index</p>
-            <h2 id="directory-title">Available directories</h2>
+            <p className="eyebrow">Fallback route registry</p>
+            <h2 id="directory-title">Directories</h2>
           </div>
-          <span>SELECT ROUTE</span>
+          <span>06 / ONLINE</span>
         </div>
 
-        <div className="directory-grid">
+        <ol>
           {portfolioSections.map((section) => (
-            <article
-              className="directory-card"
-              data-accent={section.accent}
-              key={section.slug}
-            >
-              <div className="directory-card__header">
+            <li data-accent={section.accent} key={section.slug}>
+              <Link href={section.href} aria-label={section.title}>
                 <span>{section.index}</span>
-                <span>{section.shortLabel}</span>
-              </div>
-              <h3>
-                <Link href={section.href}>{section.title}</Link>
-              </h3>
-              <p>{section.summary}</p>
-              <ul aria-label={`${section.title} subsections`}>
-                {section.subsections.map((subsection) => (
-                  <li key={subsection.id}>
-                    <Link href={getSectionHref(section, subsection)}>
-                      {subsection.label}
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-              <Link className="directory-card__open" href={section.href}>
-                Open directory <span aria-hidden="true">→</span>
+                <strong>{section.title}</strong>
+                <small>{section.subsections.length} nodes</small>
+                <span aria-hidden="true">↗</span>
               </Link>
-            </article>
+            </li>
           ))}
-        </div>
+        </ol>
       </section>
+
+      <aside className="home-hud-panel home-hud-guide" aria-label="Scene controls">
+        <span>INSPECTION CONTROLS</span>
+        <dl>
+          <div>
+            <dt>Drag</dt>
+            <dd>Rotate graph</dd>
+          </div>
+          <div>
+            <dt>Move</dt>
+            <dd>Shift camera</dd>
+          </div>
+          <div>
+            <dt>Hover</dt>
+            <dd>Trace branch</dd>
+          </div>
+        </dl>
+        <p>Node route activation enters service in Phase 2.</p>
+      </aside>
+
+      <div className="home-hud-coordinate" aria-hidden="true">
+        <span>ROOT / 00.000</span>
+        <span>25 VISIBLE NODES</span>
+      </div>
     </div>
   );
 }

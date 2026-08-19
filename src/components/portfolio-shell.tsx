@@ -1,6 +1,7 @@
 import Link from "next/link";
-import type { ReactNode } from "react";
+import { Suspense, type ReactNode } from "react";
 import { RouteNavigation } from "@/components/route-navigation";
+import { SpatialExperience } from "@/components/scene/spatial-experience";
 
 type PortfolioShellProps = {
   children: ReactNode;
@@ -8,11 +9,14 @@ type PortfolioShellProps = {
 
 export function PortfolioShell({ children }: PortfolioShellProps) {
   return (
-    <div className="site-shell" data-phase="route-foundation">
+    <div className="site-shell" data-phase="spatial-foundation">
       <a className="skip-link" href="#main-content">
         Skip to content
       </a>
       <div aria-hidden="true" className="site-grid" />
+      <Suspense fallback={null}>
+        <SpatialExperience />
+      </Suspense>
 
       <header className="site-header">
         <Link className="brand" href="/" aria-label="Portfolio home">
@@ -27,8 +31,8 @@ export function PortfolioShell({ children }: PortfolioShellProps) {
 
         <div className="system-status" aria-label="System status">
           <span aria-hidden="true" className="system-status__light" />
-          <span>ROUTE SYSTEM ONLINE</span>
-          <span className="system-status__version">PHASE_00</span>
+          <span>SPATIAL SYSTEM ONLINE</span>
+          <span className="system-status__version">PHASE_01</span>
         </div>
       </header>
 
@@ -41,8 +45,8 @@ export function PortfolioShell({ children }: PortfolioShellProps) {
       </main>
 
       <footer className="site-footer">
-        <span>DESKTOP INTERFACE / STATIC ROUTE FOUNDATION</span>
-        <span>WEBGL MODULE: NOT LOADED</span>
+        <span>DESKTOP INTERFACE / ORBITAL GRAPH FOUNDATION</span>
+        <span>WEBGL MODULE: ACTIVE</span>
       </footer>
     </div>
   );
