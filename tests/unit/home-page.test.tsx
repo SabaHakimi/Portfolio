@@ -21,11 +21,11 @@ describe("home page", () => {
     }
   });
 
-  it("describes the Phase 1 inspection controls without activating routes", () => {
+  it("describes the Phase 2 inspection and activation controls", () => {
     render(<Home />);
 
     expect(screen.getByText(/drag/i)).toBeInTheDocument();
-    expect(screen.getByText(/node route activation enters service in phase 2/i))
+    expect(screen.getByText(/select a section label or node/i))
       .toBeInTheDocument();
   });
 });

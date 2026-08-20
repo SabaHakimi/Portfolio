@@ -15,16 +15,18 @@ test("home exposes the spatial graph and complete route foundation", async ({ pa
   await expect(
     page.getByRole("heading", { level: 1, name: /orbital filesystem/i }),
   ).toBeVisible();
-  await expect(page.locator('[data-phase="spatial-foundation"]')).toBeVisible();
+  await expect(page.locator('[data-phase="navigation-choreography"]')).toBeVisible();
   await expect(page.locator('[data-spatial-scene="orbital-filesystem"]')).toHaveAttribute(
-    "data-active",
-    "true",
+    "data-mode",
+    "explore",
   );
   await expect(page.locator("canvas")).toBeVisible();
   await expect(
     page.getByRole("navigation", { name: "Portfolio sections" }),
   ).toBeVisible();
-  await expect(page.getByText("WEBGL MODULE: ACTIVE")).toBeVisible();
+  await expect(page.getByText("CAMERA + ROUTE LINK: ACTIVE")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open Projects node" }))
+    .toBeVisible();
 });
 
 test("development stress mode renders the clamped 50-node fixture", async ({
@@ -47,7 +49,11 @@ for (const [slug, title] of routes) {
     ).toBeVisible();
     await expect(
       page.locator('[data-spatial-scene="orbital-filesystem"]'),
-    ).toHaveAttribute("data-active", "false");
+    ).toHaveAttribute("data-mode", "panel");
+    await expect(page.locator(`[data-route-panel="${slug}"]`)).toBeVisible();
+    await expect(
+      page.locator('[data-spatial-scene="orbital-filesystem"]'),
+    ).toHaveAttribute("data-focused-node", `section:${slug}`);
     const navigation = page.getByRole("navigation", {
       name: "Portfolio sections",
     });
@@ -56,6 +62,52 @@ for (const [slug, title] of routes) {
     ).toHaveAttribute("aria-current", "page");
   });
 }
+
+test("graph node activation travels before opening a routed HUD panel", async ({
+  page,
+}) => {
+  await page.goto("/");
+
+  await page.getByRole("button", { name: "Open Projects node" }).click();
+  await expect(
+    page.locator('[data-spatial-scene="orbital-filesystem"]'),
+  ).toHaveAttribute("data-mode", "transition");
+  await expect(page.locator(".scene-transition-status")).toContainText("PROJECTS");
+
+  await expect(page).toHaveURL(/\/projects$/, { timeout: 5_000 });
+  await expect(page.locator('[data-route-panel="projects"]')).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Close Projects and return to root" }),
+  ).toBeVisible();
+
+  await page.goBack();
+  await expect(page).toHaveURL(/\/$/);
+  await expect(
+    page.locator('[data-spatial-scene="orbital-filesystem"]'),
+  ).toHaveAttribute("data-mode", "explore");
+});
+
+test("reduced motion preserves node navigation without a travel delay", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/");
+
+  await page.getByRole("button", { name: "Open Skills node" }).click();
+  await expect(page).toHaveURL(/\/skills$/, { timeout: 5_000 });
+  await expect(page.locator('[data-route-panel="skills"]')).toBeVisible();
+});
+
+test("Escape closes a routed HUD panel", async ({ page }) => {
+  await page.goto("/about");
+  await expect(page.locator('[data-route-panel-controls-ready="true"]')).toBeAttached();
+  await page.keyboard.press("Escape");
+
+  await expect(page).toHaveURL(/\/$/);
+  await expect(
+    page.locator('[data-spatial-scene="orbital-filesystem"]'),
+  ).toHaveAttribute("data-mode", "explore");
+});
 
 test("client navigation preserves browser history", async ({ page }) => {
   await page.goto("/");

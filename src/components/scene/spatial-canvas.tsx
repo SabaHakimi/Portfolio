@@ -8,7 +8,9 @@ import {
   useFrame,
   useThree,
 } from "@react-three/fiber";
+import gsap from "gsap";
 import {
+  type RefObject,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -29,8 +31,14 @@ import type { SectionAccent } from "@/lib/portfolio-map";
 
 type SpatialCanvasProps = {
   readonly active: boolean;
+  readonly interactive: boolean;
+  readonly focusedNodeId: string | null;
+  readonly reducedMotion: boolean;
   readonly targetNodeCount: number;
   readonly onMetrics: (metrics: SceneMetrics) => void;
+  readonly onNodeActivate: (node: SpatialNode) => void;
+  readonly onNodeIntent: (node: SpatialNode) => void;
+  readonly onCameraSettled: (nodeId: string) => void;
 };
 
 const accentColors: Record<SectionAccent | "root", string> = {
@@ -162,23 +170,112 @@ function RenderDriver({ active }: { active: boolean }) {
   return null;
 }
 
-function CameraRig({ active }: { active: boolean }) {
+function CameraRig({
+  focusMarkerRef,
+  focusedNodeId,
+  interactive,
+  onCameraSettled,
+  reducedMotion,
+}: {
+  focusMarkerRef: RefObject<THREE.Object3D | null>;
+  focusedNodeId: string | null;
+  interactive: boolean;
+  onCameraSettled: SpatialCanvasProps["onCameraSettled"];
+  reducedMotion: boolean;
+}) {
+  const camera = useThree((state) => state.camera);
+  const invalidate = useThree((state) => state.invalidate);
+  const lookAt = useRef(new THREE.Vector3(0, 0, 0));
+  const transitioning = useRef(false);
+  const settledCallback = useRef(onCameraSettled);
+
+  useLayoutEffect(() => {
+    settledCallback.current = onCameraSettled;
+  }, [onCameraSettled]);
+
+  useLayoutEffect(() => {
+    const marker = focusMarkerRef.current;
+    if (focusedNodeId && !marker) return;
+
+    const destination = new THREE.Vector3(0, 0, 12.2);
+    const target = new THREE.Vector3(0, 0, 0);
+
+    if (focusedNodeId && marker) {
+      marker.updateWorldMatrix(true, false);
+      marker.getWorldPosition(target);
+      const approach = camera.position.clone().sub(target);
+      if (approach.lengthSq() < 0.001) approach.set(0, 0, 1);
+      approach.normalize();
+      destination.copy(target).addScaledVector(approach, 5.15);
+      destination.y += 0.18;
+    }
+
+    if (reducedMotion) {
+      camera.position.copy(destination);
+      lookAt.current.copy(target);
+      camera.lookAt(target);
+      transitioning.current = false;
+      invalidate();
+
+      let cancelled = false;
+      if (focusedNodeId) {
+        queueMicrotask(() => {
+          if (!cancelled) settledCallback.current(focusedNodeId);
+        });
+      }
+
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const duration = focusedNodeId ? 0.92 : 0.68;
+    transitioning.current = true;
+    const timeline = gsap.timeline({
+      defaults: { duration, ease: "power3.inOut" },
+      onUpdate: invalidate,
+      onComplete: () => {
+        transitioning.current = false;
+        invalidate();
+        if (focusedNodeId) settledCallback.current(focusedNodeId);
+      },
+    });
+
+    timeline
+      .to(
+        camera.position,
+        { x: destination.x, y: destination.y, z: destination.z },
+        0,
+      )
+      .to(lookAt.current, { x: target.x, y: target.y, z: target.z }, 0);
+
+    return () => {
+      timeline.kill();
+      transitioning.current = false;
+    };
+  }, [camera, focusMarkerRef, focusedNodeId, invalidate, reducedMotion]);
+
   useFrame((state, delta) => {
-    const targetX = active ? state.pointer.x * 0.42 : 0;
-    const targetY = active ? state.pointer.y * 0.28 : 0;
-    state.camera.position.x = THREE.MathUtils.damp(
-      state.camera.position.x,
-      targetX,
-      4.5,
-      delta,
-    );
-    state.camera.position.y = THREE.MathUtils.damp(
-      state.camera.position.y,
-      targetY,
-      4.5,
-      delta,
-    );
-    state.camera.lookAt(0, 0, 0);
+    if (
+      interactive &&
+      !reducedMotion &&
+      !focusedNodeId &&
+      !transitioning.current
+    ) {
+      state.camera.position.x = THREE.MathUtils.damp(
+        state.camera.position.x,
+        state.pointer.x * 0.42,
+        4.5,
+        delta,
+      );
+      state.camera.position.y = THREE.MathUtils.damp(
+        state.camera.position.y,
+        state.pointer.y * 0.28,
+        4.5,
+        delta,
+      );
+    }
+    state.camera.lookAt(lookAt.current);
   });
 
   return null;
@@ -224,11 +321,11 @@ function MetricsSampler({
   return null;
 }
 
-function RootNucleus() {
+function RootNucleus({ reducedMotion }: { reducedMotion: boolean }) {
   const group = useRef<THREE.Group>(null);
 
   useFrame((_, delta) => {
-    if (!group.current) return;
+    if (!group.current || reducedMotion) return;
     group.current.rotation.x += delta * 0.08;
     group.current.rotation.y -= delta * 0.12;
   });
@@ -254,12 +351,20 @@ function RootNucleus() {
 function NodeInstances({
   nodes,
   hoveredId,
+  focusedId,
+  interactive,
   onHover,
+  onActivate,
+  onIntent,
   size,
 }: {
   nodes: readonly SpatialNode[];
   hoveredId: string | null;
+  focusedId: string | null;
+  interactive: boolean;
   onHover: (id: string | null) => void;
+  onActivate: (node: SpatialNode) => void;
+  onIntent: (node: SpatialNode) => void;
   size: number;
 }) {
   const mesh = useRef<THREE.InstancedMesh>(null);
@@ -270,20 +375,28 @@ function NodeInstances({
     for (const [index, node] of nodes.entries()) {
       scratchMatrix.makeTranslation(...node.position);
       mesh.current.setMatrixAt(index, scratchMatrix);
-      const isFocused = hoveredId === node.id;
-      scratchColor.set(isFocused ? accentColors[node.accent] : idleNodeColor);
+      const isActive = hoveredId === node.id || focusedId === node.id;
+      scratchColor.set(isActive ? accentColors[node.accent] : idleNodeColor);
       mesh.current.setColorAt(index, scratchColor);
     }
 
     mesh.current.instanceMatrix.needsUpdate = true;
     if (mesh.current.instanceColor) mesh.current.instanceColor.needsUpdate = true;
     mesh.current.computeBoundingSphere();
-  }, [hoveredId, nodes]);
+  }, [focusedId, hoveredId, nodes]);
 
   const identifyNode = (event: ThreeEvent<PointerEvent>) => {
     event.stopPropagation();
     const node = event.instanceId === undefined ? undefined : nodes[event.instanceId];
     onHover(node?.id ?? null);
+    if (node?.href) onIntent(node);
+  };
+
+  const activateNode = (event: ThreeEvent<MouseEvent>) => {
+    event.stopPropagation();
+    if (!interactive || event.delta > 5 || event.instanceId === undefined) return;
+    const node = nodes[event.instanceId];
+    if (node?.href) onActivate(node);
   };
 
   return (
@@ -293,6 +406,7 @@ function NodeInstances({
       onPointerMove={identifyNode}
       onPointerOver={identifyNode}
       onPointerOut={() => onHover(null)}
+      onClick={activateNode}
     >
       <octahedronGeometry args={[size, 0]} />
       <meshBasicMaterial toneMapped={false} />
@@ -302,10 +416,20 @@ function NodeInstances({
 
 function GraphLabels({
   graph,
+  focusedNodeId,
   hoveredNode,
+  interactive,
+  onActivate,
+  onHover,
+  onIntent,
 }: {
   graph: SpatialGraph;
+  focusedNodeId: string | null;
   hoveredNode: SpatialNode | undefined;
+  interactive: boolean;
+  onActivate: (node: SpatialNode) => void;
+  onHover: (id: string | null) => void;
+  onIntent: (node: SpatialNode) => void;
 }) {
   const sectionNodes = graph.nodes.filter((node) => node.kind === "section");
 
@@ -321,9 +445,32 @@ function GraphLabels({
           ]}
           center
         >
-          <span className="scene-node-label" data-accent={node.accent}>
+          <button
+            aria-label={`Open ${node.label} node`}
+            className="scene-node-label scene-node-label--section"
+            data-accent={node.accent}
+            data-focused={focusedNodeId === node.id || undefined}
+            data-node-id={node.id}
+            disabled={!interactive}
+            onBlur={() => onHover(null)}
+            onClick={(event) => {
+              event.stopPropagation();
+              onActivate(node);
+            }}
+            onFocus={() => {
+              onHover(node.id);
+              onIntent(node);
+            }}
+            onPointerEnter={() => {
+              onHover(node.id);
+              onIntent(node);
+            }}
+            onPointerLeave={() => onHover(null)}
+            type="button"
+          >
             {node.label.toUpperCase()}
-          </span>
+            <small>OPEN</small>
+          </button>
         </Html>
       ))}
 
@@ -342,6 +489,7 @@ function GraphLabels({
             data-hovered-node={hoveredNode.id}
           >
             {hoveredNode.label.toUpperCase()}
+            {hoveredNode.href ? <small>CLICK TO OPEN</small> : null}
           </span>
         </Html>
       ) : null}
@@ -349,7 +497,23 @@ function GraphLabels({
   );
 }
 
-function OrbitalGraph({ graph }: { graph: SpatialGraph }) {
+function OrbitalGraph({
+  focusMarkerRef,
+  focusedNodeId,
+  graph,
+  interactive,
+  onNodeActivate,
+  onNodeIntent,
+  reducedMotion,
+}: {
+  focusMarkerRef: RefObject<THREE.Object3D | null>;
+  focusedNodeId: string | null;
+  graph: SpatialGraph;
+  interactive: boolean;
+  onNodeActivate: SpatialCanvasProps["onNodeActivate"];
+  onNodeIntent: SpatialCanvasProps["onNodeIntent"];
+  reducedMotion: boolean;
+}) {
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const ringGeometry = useMemo(() => makeRingGeometry(graph), [graph]);
   const edgeGeometry = useMemo(() => makeEdgeGeometry(graph), [graph]);
@@ -363,28 +527,35 @@ function OrbitalGraph({ graph }: { graph: SpatialGraph }) {
     [graph],
   );
   const hoveredNode = graph.nodes.find((node) => node.id === hoveredId);
-  const hoveredBranch = useMemo(() => {
-    if (!hoveredNode) return [];
-    const sectionId = `section:${hoveredNode.sectionSlug}`;
+  const focusedNode = graph.nodes.find((node) => node.id === focusedNodeId);
+  const activeNode = hoveredNode ?? focusedNode;
+  const activeBranch = useMemo(() => {
+    if (!activeNode) return [];
+    const sectionId = `section:${activeNode.sectionSlug}`;
     return graph.edges.filter(
       (edge) =>
-        edge.targetId === hoveredNode.id ||
+        edge.targetId === activeNode.id ||
         (edge.sourceId === "root" && edge.targetId === sectionId),
     );
-  }, [graph.edges, hoveredNode]);
+  }, [activeNode, graph.edges]);
   const highlightGeometry = useMemo(
-    () => makeEdgeGeometry(graph, hoveredBranch),
-    [graph, hoveredBranch],
+    () => makeEdgeGeometry(graph, activeBranch),
+    [activeBranch, graph],
   );
 
-  useCursor(Boolean(hoveredId));
+  useCursor(Boolean(hoveredNode?.href) && interactive);
 
   useEffect(() => () => ringGeometry.dispose(), [ringGeometry]);
   useEffect(() => () => edgeGeometry.dispose(), [edgeGeometry]);
   useEffect(() => () => highlightGeometry.dispose(), [highlightGeometry]);
 
   return (
-    <group rotation={[0.18, -0.32, -0.04]} onPointerMissed={() => setHoveredId(null)}>
+    <group
+      rotation={[0.18, -0.32, -0.04]}
+      onPointerMissed={() => {
+        if (interactive) setHoveredId(null);
+      }}
+    >
       <points>
         <bufferGeometry>
           <bufferAttribute attach="attributes-position" args={[backdropPositions, 3]} />
@@ -398,52 +569,102 @@ function OrbitalGraph({ graph }: { graph: SpatialGraph }) {
       <lineSegments geometry={edgeGeometry}>
         <lineBasicMaterial color={idleEdgeColor} transparent opacity={0.52} />
       </lineSegments>
-      {hoveredBranch.length > 0 ? (
+      {activeBranch.length > 0 ? (
         <lineSegments geometry={highlightGeometry}>
           <lineBasicMaterial vertexColors transparent opacity={0.95} />
         </lineSegments>
       ) : null}
 
-      <RootNucleus />
+      <object3D
+        ref={focusMarkerRef}
+        position={focusedNode?.position ?? [0, 0, 0]}
+        visible={false}
+      />
+      <RootNucleus reducedMotion={reducedMotion} />
       <NodeInstances
         nodes={sectionNodes}
         hoveredId={hoveredId}
+        focusedId={focusedNodeId}
+        interactive={interactive}
         onHover={setHoveredId}
+        onActivate={onNodeActivate}
+        onIntent={onNodeIntent}
         size={0.19}
       />
       <NodeInstances
         nodes={childNodes}
         hoveredId={hoveredId}
+        focusedId={focusedNodeId}
+        interactive={interactive}
         onHover={setHoveredId}
+        onActivate={onNodeActivate}
+        onIntent={onNodeIntent}
         size={0.085}
       />
-      <GraphLabels graph={graph} hoveredNode={hoveredNode} />
+      <GraphLabels
+        graph={graph}
+        focusedNodeId={focusedNodeId}
+        hoveredNode={hoveredNode}
+        interactive={interactive}
+        onActivate={onNodeActivate}
+        onHover={setHoveredId}
+        onIntent={onNodeIntent}
+      />
     </group>
   );
 }
 
 function Scene({
   active,
+  focusedNodeId,
   graph,
+  interactive,
+  onCameraSettled,
   onMetrics,
+  onNodeActivate,
+  onNodeIntent,
+  reducedMotion,
 }: {
   active: boolean;
+  focusedNodeId: string | null;
   graph: SpatialGraph;
+  interactive: boolean;
+  onCameraSettled: SpatialCanvasProps["onCameraSettled"];
   onMetrics: SpatialCanvasProps["onMetrics"];
+  onNodeActivate: SpatialCanvasProps["onNodeActivate"];
+  onNodeIntent: SpatialCanvasProps["onNodeIntent"];
+  reducedMotion: boolean;
 }) {
+  const focusMarkerRef = useRef<THREE.Object3D>(null);
+
   return (
     <>
       <RenderDriver active={active} />
-      <CameraRig active={active} />
+      <CameraRig
+        focusMarkerRef={focusMarkerRef}
+        focusedNodeId={focusedNodeId}
+        interactive={interactive}
+        onCameraSettled={onCameraSettled}
+        reducedMotion={reducedMotion}
+      />
       <MetricsSampler graph={graph} onMetrics={onMetrics} />
       <PresentationControls
         global
         cursor={false}
+        enabled={interactive}
         speed={0.72}
         polar={[-0.46, 0.46]}
         azimuth={[-0.72, 0.72]}
       >
-        <OrbitalGraph graph={graph} />
+        <OrbitalGraph
+          focusMarkerRef={focusMarkerRef}
+          focusedNodeId={focusedNodeId}
+          graph={graph}
+          interactive={interactive}
+          onNodeActivate={onNodeActivate}
+          onNodeIntent={onNodeIntent}
+          reducedMotion={reducedMotion}
+        />
       </PresentationControls>
     </>
   );
@@ -451,8 +672,14 @@ function Scene({
 
 export function SpatialCanvas({
   active,
+  focusedNodeId,
+  interactive,
+  onCameraSettled,
   targetNodeCount,
   onMetrics,
+  onNodeActivate,
+  onNodeIntent,
+  reducedMotion,
 }: SpatialCanvasProps) {
   const graph = useMemo(
     () => createSpatialGraph(targetNodeCount),
@@ -473,7 +700,17 @@ export function SpatialCanvas({
         state.gl.setClearColor("#05070a", 0);
       }}
     >
-      <Scene active={active} graph={graph} onMetrics={onMetrics} />
+      <Scene
+        active={active}
+        focusedNodeId={focusedNodeId}
+        graph={graph}
+        interactive={interactive}
+        onCameraSettled={onCameraSettled}
+        onMetrics={onMetrics}
+        onNodeActivate={onNodeActivate}
+        onNodeIntent={onNodeIntent}
+        reducedMotion={reducedMotion}
+      />
     </Canvas>
   );
 }

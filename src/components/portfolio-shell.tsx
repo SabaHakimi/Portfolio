@@ -9,7 +9,7 @@ type PortfolioShellProps = {
 
 export function PortfolioShell({ children }: PortfolioShellProps) {
   return (
-    <div className="site-shell" data-phase="spatial-foundation">
+    <div className="site-shell" data-phase="navigation-choreography">
       <a className="skip-link" href="#main-content">
         Skip to content
       </a>
@@ -32,7 +32,7 @@ export function PortfolioShell({ children }: PortfolioShellProps) {
         <div className="system-status" aria-label="System status">
           <span aria-hidden="true" className="system-status__light" />
           <span>SPATIAL SYSTEM ONLINE</span>
-          <span className="system-status__version">PHASE_01</span>
+          <span className="system-status__version">PHASE_02</span>
         </div>
       </header>
 
@@ -45,8 +45,8 @@ export function PortfolioShell({ children }: PortfolioShellProps) {
       </main>
 
       <footer className="site-footer">
-        <span>DESKTOP INTERFACE / ORBITAL GRAPH FOUNDATION</span>
-        <span>WEBGL MODULE: ACTIVE</span>
+        <span>DESKTOP INTERFACE / SPATIAL ROUTE CHOREOGRAPHY</span>
+        <span>CAMERA + ROUTE LINK: ACTIVE</span>
       </footer>
     </div>
   );

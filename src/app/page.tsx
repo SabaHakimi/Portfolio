@@ -64,7 +64,7 @@ export default function Home() {
             <dd>Trace branch</dd>
           </div>
         </dl>
-        <p>Node route activation enters service in Phase 2.</p>
+        <p>Select a section label or node to initiate camera traversal.</p>
       </aside>
 
       <div className="home-hud-coordinate" aria-hidden="true">

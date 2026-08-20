@@ -1,4 +1,5 @@
 import {
+  getSectionHref,
   portfolioSections,
   type PortfolioSection,
   type SectionAccent,
@@ -13,6 +14,7 @@ export type SpatialNode = {
   readonly position: Vector3Tuple;
   readonly accent: SectionAccent | "root";
   readonly sectionSlug?: PortfolioSection["slug"];
+  readonly href?: string;
 };
 
 export type SpatialEdge = {
@@ -45,6 +47,7 @@ const rootNode: SpatialNode = {
   kind: "root",
   position: [0, 0, 0],
   accent: "root",
+  href: "/",
 };
 
 export const spatialRings = [
@@ -156,7 +159,7 @@ export function createSpatialGraph(
   for (const section of portfolioSections) {
     const placement = sectionPlacements[section.slug];
     const hubPosition = positionOnRing(placement.ringId, placement.angle);
-    const hubId = `section:${section.slug}`;
+    const hubId = getSectionNodeId(section.slug);
 
     nodes.push({
       id: hubId,
@@ -165,6 +168,7 @@ export function createSpatialGraph(
       position: hubPosition,
       accent: section.accent,
       sectionSlug: section.slug,
+      href: section.href,
     });
     edges.push({
       id: `edge:root:${section.slug}`,
@@ -185,10 +189,11 @@ export function createSpatialGraph(
         position: flowerPosition(hubPosition, placement, subsectionIndex),
         accent: section.accent,
         sectionSlug: section.slug,
+        href: getSectionHref(section, subsection),
       });
       edges.push({
         id: `edge:${section.slug}:${subsection.id}`,
-        sourceId: `section:${section.slug}`,
+        sourceId: getSectionNodeId(section.slug),
         targetId: nodeId,
         accent: section.accent,
       });
@@ -215,7 +220,7 @@ export function createSpatialGraph(
     });
     edges.push({
       id: `edge:${nodeId}`,
-      sourceId: `section:${record.section.slug}`,
+      sourceId: getSectionNodeId(record.section.slug),
       targetId: nodeId,
       accent: record.section.accent,
     });
@@ -223,4 +228,8 @@ export function createSpatialGraph(
   }
 
   return { nodes, edges, rings: spatialRings };
+}
+
+export function getSectionNodeId(sectionSlug: string) {
+  return `section:${sectionSlug}`;
 }
