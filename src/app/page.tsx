@@ -48,24 +48,32 @@ export default function Home() {
         </ol>
       </section>
 
-      <aside className="home-hud-panel home-hud-guide" aria-label="Scene controls">
-        <span>INSPECTION CONTROLS</span>
-        <dl>
-          <div>
-            <dt>Drag</dt>
-            <dd>Rotate graph</dd>
-          </div>
-          <div>
-            <dt>Move</dt>
-            <dd>Shift camera</dd>
-          </div>
-          <div>
-            <dt>Hover</dt>
-            <dd>Trace branch</dd>
-          </div>
-        </dl>
-        <p>Select a section label or node to initiate camera traversal.</p>
-      </aside>
+      <details className="home-hud-inspection">
+        <summary aria-label="Inspection controls" title="Inspection controls">
+          <span aria-hidden="true">i</span>
+        </summary>
+        <aside
+          className="home-hud-panel home-hud-guide"
+          aria-label="Scene controls"
+        >
+          <span>INSPECTION CONTROLS</span>
+          <dl>
+            <div>
+              <dt>Drag</dt>
+              <dd>Rotate graph</dd>
+            </div>
+            <div>
+              <dt>Move</dt>
+              <dd>Shift camera</dd>
+            </div>
+            <div>
+              <dt>Hover</dt>
+              <dd>Trace branch</dd>
+            </div>
+          </dl>
+          <p>Select a section label or node to initiate camera traversal.</p>
+        </aside>
+      </details>
 
       <div className="home-hud-coordinate" aria-hidden="true">
         <span>ROOT / 00.000</span>

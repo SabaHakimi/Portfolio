@@ -388,6 +388,10 @@ a {
   bottom: 2.7rem;
 }
 
+.site-shell:has(.scene-metrics) .home-hud-inspection {
+  bottom: 2.7rem;
+}
+
 .scene-node-label {
   --accent: var(--color-text);
   display: block;
@@ -639,13 +643,98 @@ a {
   text-transform: uppercase;
 }
 
-.home-hud-guide {
+.home-hud-inspection {
   position: absolute;
+  z-index: 4;
+  right: 0;
   bottom: 0;
-  left: 0;
+  width: 2.5rem;
+  height: 2.5rem;
+  pointer-events: auto;
+}
+
+.home-hud-inspection summary {
+  position: relative;
+  display: grid;
+  width: 2.5rem;
+  height: 2.5rem;
+  border: 1px solid var(--color-line-strong);
+  background:
+    linear-gradient(135deg, rgba(64, 230, 255, 0.1), transparent 58%),
+    rgba(6, 10, 14, 0.94);
+  box-shadow: 0 0.8rem 2.5rem rgba(0, 0, 0, 0.3);
+  color: var(--color-cyan);
+  cursor: pointer;
+  list-style: none;
+  place-items: center;
+  transition: border-color 150ms ease, background 150ms ease, color 150ms ease;
+}
+
+.home-hud-inspection summary::-webkit-details-marker {
+  display: none;
+}
+
+.home-hud-inspection summary::marker {
+  content: "";
+}
+
+.home-hud-inspection summary::before,
+.home-hud-inspection summary::after {
+  position: absolute;
+  width: 0.45rem;
+  height: 0.45rem;
+  content: "";
+  pointer-events: none;
+}
+
+.home-hud-inspection summary::before {
+  top: -1px;
+  left: -1px;
+  border-top: 1px solid var(--color-yellow);
+  border-left: 1px solid var(--color-yellow);
+}
+
+.home-hud-inspection summary::after {
+  right: -1px;
+  bottom: -1px;
+  border-right: 1px solid var(--color-cyan);
+  border-bottom: 1px solid var(--color-cyan);
+}
+
+.home-hud-inspection summary span {
+  display: grid;
+  width: 1.15rem;
+  height: 1.15rem;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  font: 750 0.7rem/1 var(--font-mono);
+  place-items: center;
+  text-shadow: 0 0 0.7rem currentColor;
+}
+
+.home-hud-inspection summary:hover,
+.home-hud-inspection summary:focus-visible,
+.home-hud-inspection[open] summary {
+  border-color: var(--color-cyan);
+  background:
+    linear-gradient(135deg, rgba(64, 230, 255, 0.18), transparent 62%),
+    rgba(6, 10, 14, 0.98);
+  color: var(--color-yellow);
+  outline: none;
+}
+
+.home-hud-inspection .home-hud-guide {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 0.65rem);
   width: clamp(19rem, 28vw, 27rem);
   padding: 0.9rem 1rem;
   border-left: 2px solid var(--color-cyan);
+  transform-origin: bottom right;
+}
+
+.home-hud-inspection[open] .home-hud-guide {
+  animation: inspection-panel-enter 180ms cubic-bezier(0.2, 0.82, 0.3, 1) both;
 }
 
 .home-hud-guide > span {
@@ -686,7 +775,7 @@ a {
 
 .home-hud-coordinate {
   position: absolute;
-  right: 0;
+  right: 3.35rem;
   bottom: 0;
   display: flex;
   flex-direction: column;
@@ -2172,6 +2261,17 @@ a {
   100% { opacity: 0; background-position: -80% 0; }
 }
 
+@keyframes inspection-panel-enter {
+  from {
+    opacity: 0;
+    transform: translateY(0.35rem) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
 @media (max-width: 1280px) {
   .route-panel__content-layout {
     grid-template-columns: 11.5rem minmax(0, 1fr);
@@ -2445,6 +2545,7 @@ a {
   }
 
   .home-hud-guide,
+  .home-hud-inspection,
   .home-hud-coordinate {
     display: none;
   }
