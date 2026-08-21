@@ -14,7 +14,7 @@ describe("section page", () => {
     navigation.push.mockClear();
   });
 
-  it("renders route metadata and addressable subsection nodes", () => {
+  it("renders project content, HUD navigation, and addressable records", () => {
     const projects = getPortfolioSection("projects");
 
     expect(projects).toBeDefined();
@@ -33,15 +33,47 @@ describe("section page", () => {
         name: "Close Projects and return to root",
       }),
     ).toHaveAttribute("href", "/");
+    expect(
+      screen.getByRole("navigation", { name: "HUD section navigator" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("navigation", { name: "Projects contents" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { level: 2, name: "Relay Mesh" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("11M")).toBeInTheDocument();
+    expect(screen.getByText("SAMPLE_DATA")).toBeInTheDocument();
 
+    const localNavigation = screen.getByRole("navigation", {
+      name: "Projects contents",
+    });
     for (const subsection of projects.subsections) {
       expect(container.querySelector(`#${subsection.id}`)).toBeInTheDocument();
       expect(
-        screen.getByRole("link", { name: `#${subsection.id}` }),
+        localNavigation.querySelector(`a[href="/projects#${subsection.id}"]`),
       ).toHaveAttribute("href", `/projects#${subsection.id}`);
     }
 
     fireEvent.keyDown(window, { key: "Escape" });
     expect(navigation.push).toHaveBeenCalledWith("/", { scroll: false });
+  });
+
+  it("renders the production-quality experience template", () => {
+    const experience = getPortfolioSection("experience");
+
+    expect(experience).toBeDefined();
+    if (!experience) return;
+
+    render(<SectionPage section={experience} />);
+
+    expect(
+      screen.getByRole("heading", {
+        level: 2,
+        name: "Senior Software Engineer",
+      }),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText("Northstar Systems")).toHaveLength(2);
+    expect(screen.getByText("31%")).toBeInTheDocument();
   });
 });

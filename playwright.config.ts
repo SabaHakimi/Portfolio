@@ -1,14 +1,18 @@
 import { defineConfig, devices } from "@playwright/test";
 
+const externalBaseUrl = process.env.PLAYWRIGHT_BASE_URL;
+const baseURL = externalBaseUrl ?? "http://127.0.0.1:3100";
+
 export default defineConfig({
   testDir: "./tests/e2e",
-  fullyParallel: true,
+  // Keep GPU-intensive WebGL cases serial so one test run models one portfolio tab.
+  fullyParallel: false,
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 2 : 0,
-  workers: process.env.CI ? 1 : undefined,
+  workers: 1,
   reporter: "html",
   use: {
-    baseURL: "http://127.0.0.1:3100",
+    baseURL,
     trace: "on-first-retry",
   },
   projects: [
@@ -17,10 +21,12 @@ export default defineConfig({
       use: { ...devices["Desktop Chrome"] },
     },
   ],
-  webServer: {
-    command: "npm run dev -- --hostname 127.0.0.1 --port 3100",
-    url: "http://127.0.0.1:3100",
-    reuseExistingServer: !process.env.CI,
-    timeout: 120_000,
-  },
+  webServer: externalBaseUrl
+    ? undefined
+    : {
+        command: "npm run dev -- --hostname 127.0.0.1 --port 3100",
+        url: "http://127.0.0.1:3100",
+        reuseExistingServer: !process.env.CI,
+        timeout: 120_000,
+      },
 });

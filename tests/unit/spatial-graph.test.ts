@@ -39,12 +39,12 @@ describe("spatial graph", () => {
   it("maps section and subsection nodes to canonical real routes", () => {
     const graph = createSpatialGraph();
     const projects = graph.nodes.find(({ id }) => id === "section:projects");
-    const projectAlpha = graph.nodes.find(
-      ({ id }) => id === "subsection:projects:project-alpha",
+    const relayMesh = graph.nodes.find(
+      ({ id }) => id === "subsection:projects:relay-mesh",
     );
 
     expect(projects?.href).toBe("/projects");
-    expect(projectAlpha?.href).toBe("/projects#project-alpha");
+    expect(relayMesh?.href).toBe("/projects#relay-mesh");
   });
 
   it("supports a clamped deterministic 50-node stress fixture", () => {

@@ -1,6 +1,6 @@
 "use client";
 
-import { Html, PresentationControls, useCursor } from "@react-three/drei";
+import { Grid, Html, PresentationControls, useCursor } from "@react-three/drei";
 import {
   Canvas,
   type RootState,
@@ -8,8 +8,10 @@ import {
   useFrame,
   useThree,
 } from "@react-three/fiber";
+import { Bloom, EffectComposer } from "@react-three/postprocessing";
 import gsap from "gsap";
 import {
+  memo,
   type RefObject,
   useEffect,
   useLayoutEffect,
@@ -28,6 +30,14 @@ import {
   type Vector3Tuple,
 } from "@/lib/spatial-graph";
 import type { SectionAccent } from "@/lib/portfolio-map";
+import {
+  includesEnvironment,
+  shouldUseBloom,
+  visualQualityProfiles,
+  type VisualEffectsMode,
+  type VisualQualityProfile,
+  type VisualQualityTier,
+} from "@/lib/visual-quality";
 
 type SpatialCanvasProps = {
   readonly active: boolean;
@@ -35,6 +45,8 @@ type SpatialCanvasProps = {
   readonly focusedNodeId: string | null;
   readonly reducedMotion: boolean;
   readonly targetNodeCount: number;
+  readonly qualityTier: VisualQualityTier;
+  readonly vfxMode: VisualEffectsMode;
   readonly onMetrics: (metrics: SceneMetrics) => void;
   readonly onNodeActivate: (node: SpatialNode) => void;
   readonly onNodeIntent: (node: SpatialNode) => void;
@@ -53,8 +65,12 @@ const accentColors: Record<SectionAccent | "root", string> = {
 
 const idleNodeColor = new THREE.Color("#516b78");
 const idleEdgeColor = new THREE.Color("#263a44");
+const rootGlowColor = new THREE.Color("#e8ff42").multiplyScalar(1.7);
 const scratchMatrix = new THREE.Matrix4();
 const scratchColor = new THREE.Color();
+const cameraOrbitAxis = new THREE.Vector3(0, 1, 0);
+const CAMERA_FOCUS_DISTANCE = 5.15;
+const CAMERA_ORBIT_SWEEP = THREE.MathUtils.degToRad(26);
 
 function vectorToArray(vector: THREE.Vector3): Vector3Tuple {
   return [vector.x, vector.y, vector.z];
@@ -130,7 +146,7 @@ function makeEdgeGeometry(
   return geometry;
 }
 
-function createBackdropPositions(count = 220) {
+function createBackdropPositions(count: number) {
   const positions = new Float32Array(count * 3);
   let seed = 21981;
 
@@ -149,25 +165,6 @@ function createBackdropPositions(count = 220) {
   }
 
   return positions;
-}
-
-function RenderDriver({ active }: { active: boolean }) {
-  const invalidate = useThree((state) => state.invalidate);
-
-  useEffect(() => {
-    if (!active) return;
-
-    let frame = 0;
-    const render = () => {
-      invalidate();
-      frame = window.requestAnimationFrame(render);
-    };
-    frame = window.requestAnimationFrame(render);
-
-    return () => window.cancelAnimationFrame(frame);
-  }, [active, invalidate]);
-
-  return null;
 }
 
 function CameraRig({
@@ -197,16 +194,23 @@ function CameraRig({
     const marker = focusMarkerRef.current;
     if (focusedNodeId && !marker) return;
 
+    const startPosition = camera.position.clone();
+    const startTarget = lookAt.current.clone();
     const destination = new THREE.Vector3(0, 0, 12.2);
     const target = new THREE.Vector3(0, 0, 0);
 
     if (focusedNodeId && marker) {
       marker.updateWorldMatrix(true, false);
       marker.getWorldPosition(target);
-      const approach = camera.position.clone().sub(target);
+      const approach = startPosition.clone().sub(target);
       if (approach.lengthSq() < 0.001) approach.set(0, 0, 1);
-      approach.normalize();
-      destination.copy(target).addScaledVector(approach, 5.15);
+      const sweepDirection = target.x >= startTarget.x ? 1 : -1;
+      approach
+        .normalize()
+        .applyAxisAngle(cameraOrbitAxis, CAMERA_ORBIT_SWEEP * sweepDirection);
+      destination
+        .copy(target)
+        .addScaledVector(approach, CAMERA_FOCUS_DISTANCE);
       destination.y += 0.18;
     }
 
@@ -229,11 +233,40 @@ function CameraRig({
       };
     }
 
-    const duration = focusedNodeId ? 0.92 : 0.68;
+    const startOffset = startPosition.clone().sub(startTarget);
+    if (startOffset.lengthSq() < 0.001) startOffset.set(0, 0, 1);
+    const destinationOffset = destination.clone().sub(target);
+    const startRadius = startOffset.length();
+    const destinationRadius = destinationOffset.length();
+    const startDirection = startOffset.normalize();
+    const destinationDirection = destinationOffset.normalize();
+    const orbitRotation = new THREE.Quaternion().setFromUnitVectors(
+      startDirection,
+      destinationDirection,
+    );
+    const currentRotation = new THREE.Quaternion();
+    const currentDirection = new THREE.Vector3();
+    const currentTarget = new THREE.Vector3();
+    const animationState = { progress: 0 };
+    const duration = focusedNodeId ? 0.92 : 0.72;
     transitioning.current = true;
     const timeline = gsap.timeline({
       defaults: { duration, ease: "power3.inOut" },
-      onUpdate: invalidate,
+      onUpdate: () => {
+        const progress = animationState.progress;
+        currentTarget.lerpVectors(startTarget, target, progress);
+        currentRotation.identity().slerp(orbitRotation, progress);
+        currentDirection
+          .copy(startDirection)
+          .applyQuaternion(currentRotation)
+          .multiplyScalar(
+            THREE.MathUtils.lerp(startRadius, destinationRadius, progress),
+          );
+        camera.position.copy(currentTarget).add(currentDirection);
+        lookAt.current.copy(currentTarget);
+        camera.lookAt(currentTarget);
+        invalidate();
+      },
       onComplete: () => {
         transitioning.current = false;
         invalidate();
@@ -241,13 +274,7 @@ function CameraRig({
       },
     });
 
-    timeline
-      .to(
-        camera.position,
-        { x: destination.x, y: destination.y, z: destination.z },
-        0,
-      )
-      .to(lookAt.current, { x: target.x, y: target.y, z: target.z }, 0);
+    timeline.to(animationState, { progress: 1 }, 0);
 
     return () => {
       timeline.kill();
@@ -282,65 +309,286 @@ function CameraRig({
 }
 
 function MetricsSampler({
+  active,
   graph,
   onMetrics,
+  qualityTier,
 }: {
+  active: boolean;
   graph: SpatialGraph;
   onMetrics: SpatialCanvasProps["onMetrics"];
+  qualityTier: VisualQualityTier;
 }) {
   const frameCount = useRef(0);
+  const maxFrameMs = useRef(0);
+  const slowFrameCount = useRef(0);
   const sampleStart = useRef(0);
+  const lastFrame = useRef(0);
+  const warmupUntil = useRef(0);
   const callbackRef = useRef(onMetrics);
 
   useEffect(() => {
     callbackRef.current = onMetrics;
   }, [onMetrics]);
 
+  useEffect(() => {
+    frameCount.current = 0;
+    maxFrameMs.current = 0;
+    slowFrameCount.current = 0;
+    sampleStart.current = 0;
+    lastFrame.current = 0;
+    warmupUntil.current = performance.now() + 2_500;
+  }, [active, graph, qualityTier]);
+
   useFrame((state) => {
     const now = performance.now();
+    if (
+      !active ||
+      document.visibilityState !== "visible" ||
+      now < warmupUntil.current
+    ) {
+      frameCount.current = 0;
+      maxFrameMs.current = 0;
+      slowFrameCount.current = 0;
+      sampleStart.current = 0;
+      lastFrame.current = now;
+      return;
+    }
+
+    const frameMs = lastFrame.current > 0 ? now - lastFrame.current : 0;
+    if (frameMs > 250) {
+      frameCount.current = 0;
+      maxFrameMs.current = 0;
+      slowFrameCount.current = 0;
+      sampleStart.current = now;
+      lastFrame.current = now;
+      return;
+    }
+    lastFrame.current = now;
+
     if (sampleStart.current === 0) {
       sampleStart.current = now;
       return;
     }
 
     frameCount.current += 1;
+    maxFrameMs.current = Math.max(maxFrameMs.current, frameMs);
+    if (frameMs > 25) slowFrameCount.current += 1;
     const elapsed = now - sampleStart.current;
 
-    if (elapsed < 750) return;
+    if (elapsed < 1_000) return;
 
     callbackRef.current({
       nodeCount: graph.nodes.length,
       drawCalls: state.gl.info.render.calls,
       triangles: state.gl.info.render.triangles,
       fps: Math.round((frameCount.current * 1000) / elapsed),
+      dpr: Number(state.gl.getPixelRatio().toFixed(2)),
+      maxFrameMs: Math.round(maxFrameMs.current),
+      slowFramePercent: Math.round(
+        (slowFrameCount.current / frameCount.current) * 100,
+      ),
+      antialias:
+        state.gl.getContext().getContextAttributes()?.antialias ?? null,
     });
     frameCount.current = 0;
+    maxFrameMs.current = 0;
+    slowFrameCount.current = 0;
     sampleStart.current = now;
   });
 
   return null;
 }
 
+function AtmosphericParticles({
+  count,
+  reducedMotion,
+}: {
+  count: number;
+  reducedMotion: boolean;
+}) {
+  const points = useRef<THREE.Points>(null);
+  const positions = useMemo(() => createBackdropPositions(count), [count]);
+
+  useFrame((state, delta) => {
+    if (!points.current || reducedMotion) return;
+    points.current.rotation.y += delta * 0.012;
+    points.current.rotation.z = Math.sin(state.clock.elapsedTime * 0.08) * 0.035;
+  });
+
+  return (
+    <points ref={points}>
+      <bufferGeometry>
+        <bufferAttribute attach="attributes-position" args={[positions, 3]} />
+      </bufferGeometry>
+      <pointsMaterial
+        blending={THREE.AdditiveBlending}
+        color="#6b9eab"
+        depthWrite={false}
+        opacity={0.34}
+        size={0.022}
+        sizeAttenuation
+        transparent
+      />
+    </points>
+  );
+}
+
+type DataPulse = {
+  readonly accent: SectionAccent;
+  readonly phase: number;
+  readonly source: THREE.Vector3;
+  readonly speed: number;
+  readonly target: THREE.Vector3;
+};
+
+function DataPulses({
+  count,
+  graph,
+  reducedMotion,
+}: {
+  count: number;
+  graph: SpatialGraph;
+  reducedMotion: boolean;
+}) {
+  const geometry = useRef<THREE.BufferGeometry>(null);
+  const pulseData = useMemo<readonly DataPulse[]>(() => {
+    const nodeById = new Map(graph.nodes.map((node) => [node.id, node]));
+    return Array.from({ length: count }, (_, index) => {
+      const edge = graph.edges[(index * 7 + 3) % graph.edges.length];
+      const source = nodeById.get(edge.sourceId);
+      const target = nodeById.get(edge.targetId);
+      return {
+        accent: edge.accent,
+        phase: ((index * 0.381966) % 1 + 1) % 1,
+        source: new THREE.Vector3(...(source?.position ?? [0, 0, 0])),
+        speed: 0.11 + (index % 5) * 0.018,
+        target: new THREE.Vector3(...(target?.position ?? [0, 0, 0])),
+      };
+    });
+  }, [count, graph.edges, graph.nodes]);
+  const positions = useMemo(() => new Float32Array(count * 3), [count]);
+  const colors = useMemo(() => {
+    const buffer = new Float32Array(count * 3);
+    pulseData.forEach((pulse, index) => {
+      const color = new THREE.Color(accentColors[pulse.accent]).multiplyScalar(2.4);
+      color.toArray(buffer, index * 3);
+    });
+    return buffer;
+  }, [count, pulseData]);
+
+  useFrame((state) => {
+    const elapsed = reducedMotion ? 0 : state.clock.elapsedTime;
+    pulseData.forEach((pulse, index) => {
+      const progress = (pulse.phase + elapsed * pulse.speed) % 1;
+      positions[index * 3] = THREE.MathUtils.lerp(
+        pulse.source.x,
+        pulse.target.x,
+        progress,
+      );
+      positions[index * 3 + 1] = THREE.MathUtils.lerp(
+        pulse.source.y,
+        pulse.target.y,
+        progress,
+      );
+      positions[index * 3 + 2] = THREE.MathUtils.lerp(
+        pulse.source.z,
+        pulse.target.z,
+        progress,
+      );
+    });
+
+    const positionAttribute = geometry.current?.getAttribute("position");
+    if (positionAttribute) positionAttribute.needsUpdate = true;
+  });
+
+  return (
+    <points frustumCulled={false}>
+      <bufferGeometry ref={geometry}>
+        <bufferAttribute attach="attributes-position" args={[positions, 3]} />
+        <bufferAttribute attach="attributes-color" args={[colors, 3]} />
+      </bufferGeometry>
+      <pointsMaterial
+        blending={THREE.AdditiveBlending}
+        depthTest={false}
+        depthWrite={false}
+        opacity={0.9}
+        size={0.045}
+        sizeAttenuation
+        toneMapped={false}
+        transparent
+        vertexColors
+      />
+    </points>
+  );
+}
+
+function EnvironmentGrid({ qualityTier }: { qualityTier: VisualQualityTier }) {
+  return (
+    <Grid
+      args={[22, 22]}
+      cellColor="#173640"
+      cellSize={qualityTier === "economy" ? 0.72 : 0.48}
+      cellThickness={0.55}
+      fadeDistance={18}
+      fadeStrength={1.8}
+      infiniteGrid
+      position={[0, -4.15, 0]}
+      sectionColor="#347080"
+      sectionSize={2.88}
+      sectionThickness={0.85}
+    />
+  );
+}
+
+function BloomPipeline({ profile }: { profile: VisualQualityProfile }) {
+  return (
+    <EffectComposer enableNormalPass={false} multisampling={0}>
+      <Bloom
+        intensity={profile.bloomIntensity}
+        luminanceSmoothing={0.18}
+        luminanceThreshold={1.02}
+        mipmapBlur
+        radius={0.24}
+        resolutionScale={profile.bloomResolutionScale}
+      />
+    </EffectComposer>
+  );
+}
+
 function RootNucleus({ reducedMotion }: { reducedMotion: boolean }) {
   const group = useRef<THREE.Group>(null);
 
-  useFrame((_, delta) => {
+  useFrame((state, delta) => {
     if (!group.current || reducedMotion) return;
     group.current.rotation.x += delta * 0.08;
     group.current.rotation.y -= delta * 0.12;
+    group.current.scale.setScalar(
+      1 + Math.sin(state.clock.elapsedTime * 1.7) * 0.025,
+    );
   });
 
   return (
     <group ref={group}>
       <mesh>
         <icosahedronGeometry args={[0.46, 1]} />
-        <meshBasicMaterial color="#e8ff42" transparent opacity={0.22} />
+        <meshBasicMaterial
+          color={rootGlowColor}
+          toneMapped={false}
+          transparent
+          opacity={0.12}
+        />
       </mesh>
       <mesh scale={1.18}>
         <icosahedronGeometry args={[0.46, 1]} />
-        <meshBasicMaterial color="#e8ff42" wireframe transparent opacity={0.95} />
+        <meshBasicMaterial
+          color={rootGlowColor}
+          toneMapped={false}
+          wireframe
+          transparent
+          opacity={0.95}
+        />
       </mesh>
-      <pointLight color="#e8ff42" intensity={5} distance={5} />
       <Html center position={[0, -0.72, 0]}>
         <span className="scene-node-label scene-node-label--root">ROOT_NODE</span>
       </Html>
@@ -350,6 +598,7 @@ function RootNucleus({ reducedMotion }: { reducedMotion: boolean }) {
 
 function NodeInstances({
   nodes,
+  emissive,
   hoveredId,
   focusedId,
   interactive,
@@ -359,6 +608,7 @@ function NodeInstances({
   size,
 }: {
   nodes: readonly SpatialNode[];
+  emissive: boolean;
   hoveredId: string | null;
   focusedId: string | null;
   interactive: boolean;
@@ -376,14 +626,23 @@ function NodeInstances({
       scratchMatrix.makeTranslation(...node.position);
       mesh.current.setMatrixAt(index, scratchMatrix);
       const isActive = hoveredId === node.id || focusedId === node.id;
-      scratchColor.set(isActive ? accentColors[node.accent] : idleNodeColor);
+      scratchColor.set(
+        isActive || (emissive && node.kind === "section")
+          ? accentColors[node.accent]
+          : idleNodeColor,
+      );
+      if (emissive) {
+        scratchColor.multiplyScalar(
+          isActive ? 1.9 : node.kind === "section" ? 1.18 : 0.92,
+        );
+      }
       mesh.current.setColorAt(index, scratchColor);
     }
 
     mesh.current.instanceMatrix.needsUpdate = true;
     if (mesh.current.instanceColor) mesh.current.instanceColor.needsUpdate = true;
     mesh.current.computeBoundingSphere();
-  }, [focusedId, hoveredId, nodes]);
+  }, [emissive, focusedId, hoveredId, nodes]);
 
   const identifyNode = (event: ThreeEvent<PointerEvent>) => {
     event.stopPropagation();
@@ -504,7 +763,10 @@ function OrbitalGraph({
   interactive,
   onNodeActivate,
   onNodeIntent,
+  profile,
+  qualityTier,
   reducedMotion,
+  vfxMode,
 }: {
   focusMarkerRef: RefObject<THREE.Object3D | null>;
   focusedNodeId: string | null;
@@ -512,12 +774,14 @@ function OrbitalGraph({
   interactive: boolean;
   onNodeActivate: SpatialCanvasProps["onNodeActivate"];
   onNodeIntent: SpatialCanvasProps["onNodeIntent"];
+  profile: VisualQualityProfile;
+  qualityTier: VisualQualityTier;
   reducedMotion: boolean;
+  vfxMode: VisualEffectsMode;
 }) {
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const ringGeometry = useMemo(() => makeRingGeometry(graph), [graph]);
   const edgeGeometry = useMemo(() => makeEdgeGeometry(graph), [graph]);
-  const backdropPositions = useMemo(() => createBackdropPositions(), []);
   const sectionNodes = useMemo(
     () => graph.nodes.filter((node) => node.kind === "section"),
     [graph],
@@ -542,6 +806,8 @@ function OrbitalGraph({
     () => makeEdgeGeometry(graph, activeBranch),
     [activeBranch, graph],
   );
+  const environmentEnabled = includesEnvironment(vfxMode);
+  const bloomEnabled = shouldUseBloom(vfxMode, qualityTier);
 
   useCursor(Boolean(hoveredNode?.href) && interactive);
 
@@ -550,18 +816,27 @@ function OrbitalGraph({
   useEffect(() => () => highlightGeometry.dispose(), [highlightGeometry]);
 
   return (
-    <group
-      rotation={[0.18, -0.32, -0.04]}
-      onPointerMissed={() => {
-        if (interactive) setHoveredId(null);
-      }}
-    >
-      <points>
-        <bufferGeometry>
-          <bufferAttribute attach="attributes-position" args={[backdropPositions, 3]} />
-        </bufferGeometry>
-        <pointsMaterial color="#65808d" size={0.018} transparent opacity={0.42} />
-      </points>
+    <>
+      {environmentEnabled ? <EnvironmentGrid qualityTier={qualityTier} /> : null}
+      <group
+        rotation={[0.18, -0.32, -0.04]}
+        onPointerMissed={() => {
+          if (interactive) setHoveredId(null);
+        }}
+      >
+      {environmentEnabled ? (
+        <>
+          <AtmosphericParticles
+            count={profile.particleCount}
+            reducedMotion={reducedMotion}
+          />
+          <DataPulses
+            count={profile.pulseCount}
+            graph={graph}
+            reducedMotion={reducedMotion}
+          />
+        </>
+      ) : null}
 
       <lineSegments geometry={ringGeometry}>
         <lineBasicMaterial vertexColors transparent opacity={0.2} />
@@ -580,9 +855,10 @@ function OrbitalGraph({
         position={focusedNode?.position ?? [0, 0, 0]}
         visible={false}
       />
-      <RootNucleus reducedMotion={reducedMotion} />
+      <RootNucleus reducedMotion={reducedMotion || vfxMode === "off"} />
       <NodeInstances
         nodes={sectionNodes}
+        emissive={bloomEnabled}
         hoveredId={hoveredId}
         focusedId={focusedNodeId}
         interactive={interactive}
@@ -593,6 +869,7 @@ function OrbitalGraph({
       />
       <NodeInstances
         nodes={childNodes}
+        emissive={bloomEnabled}
         hoveredId={hoveredId}
         focusedId={focusedNodeId}
         interactive={interactive}
@@ -610,7 +887,8 @@ function OrbitalGraph({
         onHover={setHoveredId}
         onIntent={onNodeIntent}
       />
-    </group>
+      </group>
+    </>
   );
 }
 
@@ -623,7 +901,10 @@ function Scene({
   onMetrics,
   onNodeActivate,
   onNodeIntent,
+  profile,
+  qualityTier,
   reducedMotion,
+  vfxMode,
 }: {
   active: boolean;
   focusedNodeId: string | null;
@@ -633,13 +914,15 @@ function Scene({
   onMetrics: SpatialCanvasProps["onMetrics"];
   onNodeActivate: SpatialCanvasProps["onNodeActivate"];
   onNodeIntent: SpatialCanvasProps["onNodeIntent"];
+  profile: VisualQualityProfile;
+  qualityTier: VisualQualityTier;
   reducedMotion: boolean;
+  vfxMode: VisualEffectsMode;
 }) {
   const focusMarkerRef = useRef<THREE.Object3D>(null);
 
   return (
     <>
-      <RenderDriver active={active} />
       <CameraRig
         focusMarkerRef={focusMarkerRef}
         focusedNodeId={focusedNodeId}
@@ -647,7 +930,12 @@ function Scene({
         onCameraSettled={onCameraSettled}
         reducedMotion={reducedMotion}
       />
-      <MetricsSampler graph={graph} onMetrics={onMetrics} />
+      <MetricsSampler
+        active={active}
+        graph={graph}
+        onMetrics={onMetrics}
+        qualityTier={qualityTier}
+      />
       <PresentationControls
         global
         cursor={false}
@@ -663,14 +951,20 @@ function Scene({
           interactive={interactive}
           onNodeActivate={onNodeActivate}
           onNodeIntent={onNodeIntent}
+          profile={profile}
+          qualityTier={qualityTier}
           reducedMotion={reducedMotion}
+          vfxMode={vfxMode}
         />
       </PresentationControls>
+      {shouldUseBloom(vfxMode, qualityTier) ? (
+        <BloomPipeline profile={profile} />
+      ) : null}
     </>
   );
 }
 
-export function SpatialCanvas({
+export const SpatialCanvas = memo(function SpatialCanvas({
   active,
   focusedNodeId,
   interactive,
@@ -679,22 +973,26 @@ export function SpatialCanvas({
   onMetrics,
   onNodeActivate,
   onNodeIntent,
+  qualityTier,
   reducedMotion,
+  vfxMode,
 }: SpatialCanvasProps) {
   const graph = useMemo(
     () => createSpatialGraph(targetNodeCount),
     [targetNodeCount],
   );
+  const profile = visualQualityProfiles[qualityTier];
 
   return (
     <Canvas
       camera={{ position: [0, 0, 12.2], fov: 42, near: 0.1, far: 80 }}
-      dpr={[1, 1.5]}
-      frameloop="demand"
+      dpr={[...profile.dpr]}
+      frameloop={active && !reducedMotion ? "always" : "demand"}
       gl={{
         alpha: true,
-        antialias: true,
+        antialias: qualityTier !== "economy",
         powerPreference: "high-performance",
+        stencil: false,
       }}
       onCreated={(state: RootState) => {
         state.gl.setClearColor("#05070a", 0);
@@ -709,8 +1007,11 @@ export function SpatialCanvas({
         onMetrics={onMetrics}
         onNodeActivate={onNodeActivate}
         onNodeIntent={onNodeIntent}
+        profile={profile}
+        qualityTier={qualityTier}
         reducedMotion={reducedMotion}
+        vfxMode={vfxMode}
       />
     </Canvas>
   );
-}
+});

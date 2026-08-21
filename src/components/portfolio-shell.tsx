@@ -9,11 +9,16 @@ type PortfolioShellProps = {
 
 export function PortfolioShell({ children }: PortfolioShellProps) {
   return (
-    <div className="site-shell" data-phase="navigation-choreography">
+    <div className="site-shell" data-phase="cyberpunk-vfx">
       <a className="skip-link" href="#main-content">
         Skip to content
       </a>
       <div aria-hidden="true" className="site-grid" />
+      <div aria-hidden="true" className="system-vfx">
+        <span className="system-vfx__scan" />
+        <span className="system-vfx__noise" />
+        <span className="system-vfx__corners" />
+      </div>
       <Suspense fallback={null}>
         <SpatialExperience />
       </Suspense>
@@ -32,7 +37,7 @@ export function PortfolioShell({ children }: PortfolioShellProps) {
         <div className="system-status" aria-label="System status">
           <span aria-hidden="true" className="system-status__light" />
           <span>SPATIAL SYSTEM ONLINE</span>
-          <span className="system-status__version">PHASE_02</span>
+          <span className="system-status__version">PHASE_04</span>
         </div>
       </header>
 
@@ -45,8 +50,8 @@ export function PortfolioShell({ children }: PortfolioShellProps) {
       </main>
 
       <footer className="site-footer">
-        <span>DESKTOP INTERFACE / SPATIAL ROUTE CHOREOGRAPHY</span>
-        <span>CAMERA + ROUTE LINK: ACTIVE</span>
+        <span>DESKTOP INTERFACE / ADAPTIVE RENDER PIPELINE</span>
+        <span>HUD + VISUAL EFFECTS SYSTEM: ACTIVE</span>
       </footer>
     </div>
   );
