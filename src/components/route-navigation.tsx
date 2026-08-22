@@ -9,25 +9,32 @@ export function RouteNavigation() {
 
   return (
     <nav aria-label="Portfolio sections" className="route-nav">
-      <p className="route-nav__label">Directory index</p>
+      <p className="route-nav__label">Select destination</p>
       <ol className="route-nav__list">
         {portfolioSections.map((section) => {
           const isActive = pathname === section.href;
 
           return (
-            <li key={section.slug}>
+            <li
+              data-accent={section.accent}
+              data-route={section.slug}
+              key={section.slug}
+            >
               <Link
+                aria-label={section.title}
                 className="route-nav__link"
                 data-accent={section.accent}
                 data-active={isActive || undefined}
                 href={section.href}
                 aria-current={isActive ? "page" : undefined}
               >
-                <span className="route-nav__index">{section.index}</span>
-                <span>{section.title}</span>
-                <span aria-hidden="true" className="route-nav__signal">
-                  {isActive ? "●" : "○"}
+                <span className="route-nav__copy">
+                  <span className="route-nav__title">{section.title}</span>
+                  <span aria-hidden="true" className="route-nav__hint">
+                    {section.shortLabel}
+                  </span>
                 </span>
+                <span aria-hidden="true" className="route-nav__signal" />
               </Link>
             </li>
           );

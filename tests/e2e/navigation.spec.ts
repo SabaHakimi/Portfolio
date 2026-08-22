@@ -13,7 +13,7 @@ test("home exposes the spatial graph and complete route foundation", async ({ pa
   await page.goto("/");
 
   await expect(
-    page.getByRole("heading", { level: 1, name: /orbital filesystem/i }),
+    page.getByRole("heading", { level: 1, name: /sabawoon hakimi/i }),
   ).toBeVisible();
   await expect(page.locator('[data-phase="cyberpunk-vfx"]')).toBeVisible();
   await expect(page.locator('[data-spatial-scene="orbital-filesystem"]')).toHaveAttribute(
@@ -31,6 +31,10 @@ test("home exposes the spatial graph and complete route foundation", async ({ pa
   await expect(
     page.getByRole("navigation", { name: "Portfolio sections" }),
   ).toBeVisible();
+  await expect(page.locator(".route-nav__list > li")).toHaveCount(6);
+  await expect(
+    page.getByRole("heading", { level: 2, name: "Directories" }),
+  ).toHaveCount(0);
   await expect(page.getByText("HUD + VISUAL EFFECTS SYSTEM: ACTIVE")).toBeVisible();
   await expect(page.getByRole("button", { name: "Open Projects node" }))
     .toBeVisible();
@@ -94,7 +98,7 @@ for (const [slug, title] of routes) {
       page.locator('[data-spatial-scene="orbital-filesystem"]'),
     ).toHaveAttribute("data-focused-node", `section:${slug}`);
     const navigation = page.getByRole("navigation", {
-      name: "Portfolio sections",
+      name: "HUD section navigator",
     });
     await expect(
       navigation.getByRole("link", { name: new RegExp(title, "i") }),
@@ -151,7 +155,10 @@ test("Escape closes a routed HUD panel", async ({ page }) => {
 
 test("client navigation preserves browser history", async ({ page }) => {
   await page.goto("/");
-  await page.getByRole("link", { name: "Explore projects" }).click();
+  await page
+    .getByRole("navigation", { name: "Portfolio sections" })
+    .getByRole("link", { name: "Projects" })
+    .click();
 
   await expect(page).toHaveURL(/\/projects$/);
   await expect(

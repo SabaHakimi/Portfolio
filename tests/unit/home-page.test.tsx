@@ -10,9 +10,18 @@ describe("home page", () => {
     expect(
       screen.getByRole("heading", {
         level: 1,
-        name: /orbital filesystem/i,
+        name: /sabawoon hakimi/i,
       }),
     ).toBeInTheDocument();
+    expect(screen.getByText("Software Engineering Portfolio"))
+      .toBeInTheDocument();
+    expect(screen.getByText("A spatial index of my work and experience."))
+      .toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /explore projects/i }))
+      .not.toBeInTheDocument();
+    expect(screen.queryByText("Navigation registry")).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Directories" }))
+      .not.toBeInTheDocument();
 
     for (const section of portfolioSections) {
       expect(

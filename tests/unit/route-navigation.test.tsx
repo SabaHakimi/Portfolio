@@ -18,5 +18,19 @@ describe("route navigation", () => {
       "aria-current",
     );
     expect(screen.getAllByRole("link")).toHaveLength(6);
+    expect(screen.queryByText("01")).not.toBeInTheDocument();
+    expect(screen.getByText("Build archive")).toBeInTheDocument();
+
+    for (const route of [
+      "about",
+      "experience",
+      "projects",
+      "education",
+      "skills",
+      "contact",
+    ]) {
+      expect(document.querySelector(`[data-route="${route}"]`))
+        .toBeInTheDocument();
+    }
   });
 });
