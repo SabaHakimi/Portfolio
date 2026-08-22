@@ -248,22 +248,22 @@ a {
 }
 
 .route-nav__list > li[data-route="experience"] {
-  top: 16%;
-  right: 2.8rem;
+  top: 5%;
+  right: 9%;
   width: 13.75rem;
   rotate: 0.5deg;
 }
 
 .route-nav__list > li[data-route="projects"] {
-  top: calc(43% + 0.75rem);
-  right: 2.75rem;
+  top: 31%;
+  right: 3%;
   width: 12.6rem;
   rotate: -0.35deg;
 }
 
 .route-nav__list > li[data-route="education"] {
-  right: 8%;
-  bottom: 10%;
+  top: 57%;
+  right: 3%;
   width: 12.4rem;
   rotate: 0.7deg;
 }
